@@ -1,0 +1,8 @@
+{
+    "WalkerThreads" : 8,
+    "HasherThreads" : 8,
+    "MinValidByte":1024,
+    "Byte2Hash": 512,
+    
+    "xxx":"used to keep format"
+}
