@@ -3,6 +3,9 @@
     "HasherThreads" : 8,
     "MinValidByte":1024,
     "Byte2Hash": 512,
-    
+    "Log2Console": true,
+    "LogLevel": "INFO",
+    "LogDir" : "log_dir",
+    "LogFlushSec": 5,
     "xxx":"used to keep format"
 }

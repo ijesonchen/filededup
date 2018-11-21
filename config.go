@@ -3,16 +3,21 @@ package main
 import (
 	"encoding/json"
 	"io/ioutil"
+	"time"
 
 	"github.com/ijesonchen/glog"
 )
 
 // Config .
 type Config struct {
-	WalkerThreads int // threads to search folders
-	HasherThreads int // threads to hash files
-	MinValidByte  int // minimux file size to process
-	Byte2Hash     int // less than MinValidByte. only hash from part of file with hash32.
+	WalkerThreads int           // threads to search folders
+	HasherThreads int           // threads to hash files
+	MinValidByte  int           // minimux file size to process
+	Byte2Hash     int           // less than MinValidByte. only hash from part of file with hash32.
+	Log2Console   bool          // output log 2 console
+	LogLevel      string        // INFO, DEBUG, WARNING， ERROR
+	LogDir        string        // will auto create
+	LogFlushSec   time.Duration // log flush intervalue in seconds
 }
 
 // ReadConfig .

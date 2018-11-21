@@ -11,6 +11,24 @@ import (
 	"github.com/ijesonchen/glog"
 )
 
+func setglog(toConsole bool, logdir, level string) {
+	var err error
+	glog.AlsoToStderr(toConsole)
+	if len(logdir) > 0 {
+		if err = os.MkdirAll(logdir, 0777); err != nil {
+			glog.Error("os.MkdirAll error: ", err)
+			return
+		}
+		glog.SetLogDir(logdir)
+	}
+	if len(level) > 0 {
+		if err = glog.SetLevel(level); err != nil {
+			glog.Fatal("SetLevel error: ", err)
+			return
+		}
+	}
+}
+
 func main() {
 	var err error
 	var dirTotal, fileTotal int32
@@ -23,6 +41,8 @@ func main() {
 		return
 	}
 
+	setglog(true, "log_dir", "INFO")
+
 	initDirs := os.Args[1:]
 
 	flag.Parse()
@@ -30,27 +50,16 @@ func main() {
 		fmt.Println(i, a)
 	}
 
-	glog.AlsoToStderr(true)
-	logdir := "log_dir"
-	if err = os.MkdirAll(logdir, 0777); err != nil {
-		glog.Error("os.MkdirAll error: ", err)
-		return
-	}
-	glog.SetLogDir(logdir)
-	loglevel := "INFO"
-	if err = glog.SetLevel(loglevel); err != nil {
-		glog.Fatal("SetLevel error: ", err)
-		return
-	}
+	cfg := ReadConfig("filedup.json")
+	setglog(cfg.Log2Console, cfg.LogDir, cfg.LogLevel)
+
 	// log flusher thread
-	ticker := time.NewTicker(time.Second)
+	ticker := time.NewTicker(cfg.LogFlushSec * time.Second)
 	go func() {
 		for range ticker.C {
 			glog.Flush()
 		}
 	}()
-
-	cfg := ReadConfig("filedup.json")
 
 	chDir := make(chan string)
 	chFile := make(chan string)
@@ -73,13 +82,13 @@ func main() {
 		for i := 0; i < cfg.HasherThreads; i++ {
 			go func(i int) {
 				for fn := range chFile {
-					h, e := hashFile(fn, cfg.Byte2Hash)
+					h, e := fnv64File(fn, cfg.Byte2Hash)
 					currentFile := atomic.AddInt32(&fileJobLeft, -1)
 					currentDir := atomic.LoadInt32(&dirJobLeft)
 					if e != nil {
 						glog.Errorf("hashFile %q error %v", fn, e)
 					} else {
-						glog.Warningf("--> %q : %d", fn, h)
+						glog.Infof("--> %q : %d", fn, h)
 					}
 					// if finished...
 					if currentFile == 0 && currentDir == 0 {
@@ -88,7 +97,7 @@ func main() {
 					}
 				}
 				wgHasher.Done()
-				glog.Warningf("hasher thread %d stopped.", i)
+				glog.Infof("hasher thread %d stopped.", i)
 			}(i)
 		}
 	}

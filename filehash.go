@@ -44,13 +44,13 @@ func readData(fn string, byte2hash int) (data []byte, err error) {
 	return
 }
 
-func hashFile(fn string, byte2hash int) (fp uint64, err error) {
-	glog.Infof("ENTER hashFile %q, %d", fn, byte2hash)
+func fnv64File(fn string, byte2hash int) (fp uint64, err error) {
+	glog.Infof("ENTER fnv64File %q, %d", fn, byte2hash)
 	defer func() {
 		if err != nil {
-			glog.Errorf("hashFile %q error: %v", fn, err)
+			glog.Errorf("fnv64File %q error: %v", fn, err)
 		}
-		glog.Infof("LEAVE hashFile %q", fn)
+		glog.Infof("LEAVE fnv64File %q", fn)
 	}()
 
 	data, err := readData(fn, byte2hash)
@@ -58,7 +58,7 @@ func hashFile(fn string, byte2hash int) (fp uint64, err error) {
 	h.Write(data)
 	fp = h.Sum64()
 	if fp == 0 {
-		glog.Warningf("hashFile %q got 0 hash", fn)
+		glog.Warningf("fnv64File %q got 0 hash", fn)
 	}
 	return
 }
