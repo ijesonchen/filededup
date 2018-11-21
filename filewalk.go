@@ -6,7 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/golang/glog"
+	"github.com/ijesonchen/glog"
 )
 
 func isDir(fn string) bool {

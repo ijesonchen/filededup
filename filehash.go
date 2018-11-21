@@ -6,7 +6,7 @@ import (
 	"hash/fnv"
 	"os"
 
-	"github.com/golang/glog"
+	"github.com/ijesonchen/glog"
 )
 
 func readData(fn string, byte2hash int) (data []byte, err error) {

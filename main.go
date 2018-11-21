@@ -4,14 +4,19 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"sync"
+	"sync/atomic"
 	"time"
 
-	"github.com/golang/glog"
+	"github.com/ijesonchen/glog"
 )
 
 func main() {
 	var err error
-	defer glog.Exit("main exit.")
+	var dirTotal, fileTotal int32
+	defer glog.Flush()
+	defer glog.Infof("main exit.")
+	defer func() { glog.Infof("total %d dirs, %d files", dirTotal, fileTotal) }()
 
 	if len(os.Args) <= 1 {
 		glog.Error("no dir speified.")
@@ -26,7 +31,7 @@ func main() {
 	}
 
 	glog.AlsoToStderr(true)
-	logdir := "log"
+	logdir := "log_dir"
 	if err = os.MkdirAll(logdir, 0777); err != nil {
 		glog.Error("os.MkdirAll error: ", err)
 		return
@@ -37,52 +42,7 @@ func main() {
 		glog.Fatal("SetLevel error: ", err)
 		return
 	}
-
-	cfg := ReadConfig("filedup.json")
-
-	chDir := make(chan string)
-	chFile := make(chan string)
-
-	go func() {
-		for _, d := range initDirs {
-			chDir <- d
-		}
-	}()
-
-	for i := 0; i < cfg.WalkerThreads; i++ {
-		go func() {
-			for dir := range chDir {
-				dirs, files, e := walkDir(dir)
-				if err != nil {
-					glog.Errorf("walk dir %q error: %v", dir, e)
-					continue
-				}
-				go func() {
-					for _, i := range dirs {
-						chDir <- i
-					}
-				}()
-				go func() {
-					for _, i := range files {
-						chFile <- i
-					}
-				}()
-			}
-		}()
-	}
-
-	for i := 0; i < cfg.HasherThreads; i++ {
-		go func() {
-			for fn := range chFile {
-				h, e := hashFile(fn, cfg.Byte2Hash)
-				if e != nil {
-					glog.Errorf("hashFile %q error %v", fn, e)
-				}
-				glog.Warningf("--> %q : %d", fn, h)
-			}
-		}()
-	}
-
+	// log flusher thread
 	ticker := time.NewTicker(time.Second)
 	go func() {
 		for range ticker.C {
@@ -90,6 +50,110 @@ func main() {
 		}
 	}()
 
-	barrer := make(chan bool)
-	<-barrer
+	cfg := ReadConfig("filedup.json")
+
+	chDir := make(chan string)
+	chFile := make(chan string)
+
+	var dirJobLeft, fileJobLeft int32
+	dirJobLeft = int32(len(initDirs))
+	dirTotal = 0 // do not count root dir
+
+	go func() {
+		for _, d := range initDirs {
+			chDir <- d
+		}
+	}()
+
+	var wgWalker, wgHasher, wgJob sync.WaitGroup
+
+	var hasherStarter sync.Once
+	startHasher := func() {
+		wgHasher.Add(cfg.HasherThreads)
+		for i := 0; i < cfg.HasherThreads; i++ {
+			go func(i int) {
+				for fn := range chFile {
+					h, e := hashFile(fn, cfg.Byte2Hash)
+					currentFile := atomic.AddInt32(&fileJobLeft, -1)
+					currentDir := atomic.LoadInt32(&dirJobLeft)
+					if e != nil {
+						glog.Errorf("hashFile %q error %v", fn, e)
+					} else {
+						glog.Warningf("--> %q : %d", fn, h)
+					}
+					// if finished...
+					if currentFile == 0 && currentDir == 0 {
+						close(chFile)
+						break
+					}
+				}
+				wgHasher.Done()
+				glog.Warningf("hasher thread %d stopped.", i)
+			}(i)
+		}
+	}
+
+	wgWalker.Add(cfg.WalkerThreads)
+	for i := 0; i < cfg.WalkerThreads; i++ {
+		go func(i int) {
+			// get next dir
+			for dir := range chDir {
+				// process dir
+				dirs, files, e := walkDir(dir)
+				nDir := int32(len(dirs))
+				nFile := int32(len(files))
+				// cnt job first
+				atomic.AddInt32(&dirTotal, nDir)
+				current := atomic.AddInt32(&dirJobLeft, nDir-1)
+				if err != nil {
+					glog.Errorf("walk dir %q error: %v", dir, e)
+					// if finished...
+					if current == 0 {
+						close(chDir)
+						break
+					}
+					continue
+				}
+				atomic.AddInt32(&fileTotal, nFile)
+				atomic.AddInt32(&fileJobLeft, nFile)
+
+				// send jobs
+				go func(dirs []string) {
+					for _, i := range dirs {
+						chDir <- i
+					}
+				}(dirs)
+				go func(files []string) {
+					for _, i := range files {
+						// make sure at least on file
+						hasherStarter.Do(startHasher)
+						chFile <- i
+					}
+				}(files)
+
+				// if finished...
+				if current == 0 {
+					close(chDir)
+					break
+				}
+			}
+			wgWalker.Done()
+			glog.Warningf("walker thread %d stopped.", i)
+		}(i)
+	}
+
+	// job waiter
+	wgJob.Add(1)
+	go func() {
+		wgWalker.Wait()
+		glog.Warning("all walker thread stopped.")
+
+		wgHasher.Wait()
+		glog.Warning("all hasher thread stopped.")
+		wgJob.Done()
+	}()
+
+	// wait all worker threads
+	glog.Info("wait all job threads.")
+	wgJob.Wait()
 }

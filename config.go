@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"io/ioutil"
 
-	"github.com/golang/glog"
+	"github.com/ijesonchen/glog"
 )
 
 // Config .
