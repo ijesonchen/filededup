@@ -25,8 +25,3 @@ type IClient interface {
 	Delete(id string) (err error)
 	List(count, skip int64, order string) (files []FileInfo, err error)
 }
-
-// NewClient .
-func NewClient(host, port, dbname, coll string) (client IClient, err error) {
-	return
-}
