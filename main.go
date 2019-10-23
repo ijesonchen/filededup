@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/ijesonchen/glog"
+
+	"github.com/ijesonchen/filededup/utils"
 )
 
 func setglog(toConsole bool, logdir, level string) {
@@ -165,4 +167,9 @@ func main() {
 	// wait all worker threads
 	glog.Info("wait all job threads.")
 	wgJob.Wait()
+
+	// for concurrent control
+	cc := utils.NewConcurentControl(20, 100, 10)
+	cc.Enter()
+	cc.Leave()
 }
